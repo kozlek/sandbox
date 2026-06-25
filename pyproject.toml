@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Make `backend` / `frontend` importable as top-level packages so the
+# CI check resolves cross-package references (the whole point of the demo:
+# PR A references a symbol PR B adds).
+pythonpath = ["."]
