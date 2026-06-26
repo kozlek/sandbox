@@ -67,18 +67,31 @@ open_pr() {  # $1 branch  $2 commit/title  $3 body
 
 echo "Opening scenario PRs..."
 
-# PR A — backend, red on its own (uses multiply() before it exists).
+# PR A — backend, broken on its own, but its failure is SLOW.
+# skip_intermediate_results only promotes ancestors whose check is still
+# pending (WAITING_FOR_CI); a *definitively-failed* car parks the chain
+# (the NoSkipWithFailure invariant). So A's failure must stay non-definitive
+# long enough for the [A+B] child car to pass and promote A. The sleep runs
+# ONLY on the failing (multiply-missing) path, so A-alone stays pending ~150s
+# while [A+B] (multiply present) passes in ~30s.
 start_branch "${BRANCH_A}"
 cat > backend/test_multiply.py <<'PY'
-from backend.calculator import multiply
-
-
 def test_multiply() -> None:
+    try:
+        from backend.calculator import multiply
+    except ImportError:
+        # A alone: multiply() missing — stall so the failure isn't definitive
+        # before the [A+B] car passes and skip_intermediate_results promotes A.
+        import time
+
+        time.sleep(150)
+        raise
+    # A+B: multiply() exists — passes fast, no sleep.
     assert multiply(2, 3) == 6
 PY
 open_pr "${BRANCH_A}" \
   "feat(backend): use multiply()" \
-  "Adds a test for \`multiply()\`. **Red on its own** — \`multiply\` doesn't exist on \`main\` yet; it only passes combined with its child PR (\`${BRANCH_B}\`). Backend scope."
+  "Uses \`multiply()\`, which doesn't exist on \`main\` yet — so **A alone fails, but slowly** (it stalls ~150s on the missing import). Its child PR (\`${BRANCH_B}\`) adds \`multiply()\`, so the \`[A+B]\` car passes in ~30s and \`skip_intermediate_results\` promotes A while its own check is still pending. Backend scope."
 
 # PR B — backend, the fix (defines multiply); tested as A+B in the chain.
 start_branch "${BRANCH_B}"
