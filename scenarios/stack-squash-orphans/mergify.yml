@@ -1,0 +1,22 @@
+# Config for scenario: stack-squash-orphans (MRGFY-7739).
+#
+# Swap this to the repo-root `.mergify.yml` before running the scenario
+# (Mergify reads config from the DEFAULT branch), then restore the active
+# config when you're done — see this scenario's README.
+#
+# Deliberately a minimal SERIAL squash queue: no scopes / parallel, which would
+# only muddy a stack repro. The one thing that matters here is
+# `merge_method: squash` — squashing a stack parent rewrites its commit on
+# `main` WITHOUT the `Change-Id` trailer, so the child PR can't recognize the
+# parent's original commit as already-merged and keeps displaying it.
+queue_rules:
+  - name: default
+    # Only the `queue` label is needed to ENTER the queue.
+    queue_conditions:
+      - "label=queue"
+    # The merge gate, evaluated on each speculative car's CI.
+    merge_conditions:
+      - "check-success=ci"
+    batch_size: 1
+    merge_method: squash
+    autoqueue: true

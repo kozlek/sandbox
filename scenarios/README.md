@@ -16,3 +16,4 @@ says so and you swap the root config before running it.
 | Scenario | Tests |
 |----------|-------|
 | `skip-intermediate-results` | `skip_intermediate_results` in `parallel` mode (MRGFY-7620) |
+| `stack-squash-orphans` | stack child keeps its squash-merged parents' commits after a squash merge (MRGFY-7739) |

@@ -46,3 +46,4 @@ git push
 | Scenario | Tests | Status |
 |----------|-------|--------|
 | [skip-intermediate-results](./scenarios/skip-intermediate-results/) | `skip_intermediate_results` promotes a red ancestor car when its green child car passes, in `parallel` mode | ready to push |
+| [stack-squash-orphans](./scenarios/stack-squash-orphans/) | a stack child keeps its squash-merged parents' commits (shows N commits, not 1); auto-rebase doesn't clean it because the child is clean, not `dirty` (MRGFY-7739). Needs a `squash` config swap. | ready to push |
