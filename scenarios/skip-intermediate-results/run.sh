@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 #
-# Scenario: skip_intermediate_results in parallel mode.
-# Opens three throwaway PRs against main. main is never touched.
-#   A, B  -> `backend` scope chain (the skip fires here)
-#   C     -> `frontend` scope, runs in parallel (makes it visibly parallel mode)
+# Scenario: skip_intermediate_results in parallel mode — 4-ancestor chain.
+# Opens 5 backend PRs against main. main is never touched.
+#   A1..A4 -> each uses a distinct op (op1..op4) that doesn't exist on main,
+#             so each FAILS SLOWLY on its own (sleeps ~300s on the missing import).
+#   B      -> defines op1..op4; queued LAST so its car is [A1..A4 + B] and passes fast.
+# When B's car passes, skip_intermediate_results promotes all four still-pending
+# ancestors AT ONCE -> four "Intermediate skipped" badges appear together on the
+# Merge Queue dashboard and linger through the sequential merges (5 cars = the
+# max_parallel_checks cap, so all run concurrently).
 #
-#   run.sh           open PRs A, B, C
+#   run.sh           open the PRs
 #   run.sh --reset   close them + delete their branches
 #
 # Run from the set-up sandbox repo. Requires git + gh (authenticated as kozlek).
+# This script only CREATES the PRs. Queue them with the reliable order (see the
+# scenario README): label A1..A4, WAIT for all to embark, THEN label B last.
 
 set -euo pipefail
 
 BASE="main"
-BRANCH_A="skip-demo/use-multiply"        # backend, broken on its own
-BRANCH_B="skip-demo/add-multiply"        # backend, the fix — child of A
-BRANCH_C="skip-demo/frontend-greeting"   # frontend, independent parallel scope
+OPS="op1 op2 op3 op4"                 # ancestors: skip-demo/use-<op>
+FIX_BRANCH="skip-demo/add-ops"        # B: defines every op, queued last
 
 # Repo root is two levels up from this script.
 cd "$(dirname "$0")/../.."
@@ -29,9 +35,14 @@ close_pr_for() {  # $1 = head branch — best-effort
   gh pr close "$1" --delete-branch >/dev/null 2>&1 || true
 }
 
+all_branches() {
+  for op in $OPS; do echo "skip-demo/use-$op"; done
+  echo "${FIX_BRANCH}"
+}
+
 teardown() {
   echo "Closing scenario PRs and deleting branches..."
-  for b in "${BRANCH_A}" "${BRANCH_B}" "${BRANCH_C}"; do
+  for b in $(all_branches); do
     close_pr_for "$b"
     git push origin --delete "$b" >/dev/null 2>&1 || true
     git branch -D "$b" >/dev/null 2>&1 || true
@@ -65,68 +76,65 @@ open_pr() {  # $1 branch  $2 commit/title  $3 body
   git checkout -q "${BASE}"
 }
 
-echo "Opening scenario PRs..."
+echo "Opening scenario PRs (4 ancestors + 1 fix)..."
 
-# PR A — backend, broken on its own, but its failure is SLOW.
-# skip_intermediate_results only promotes ancestors whose check is still
-# pending (WAITING_FOR_CI); a *definitively-failed* car parks the chain
-# (the NoSkipWithFailure invariant). So A's failure must stay non-definitive
-# long enough for the [A+B] child car to pass and promote A. The sleep runs
-# ONLY on the failing (multiply-missing) path, so A-alone stays pending ~150s
-# while [A+B] (multiply present) passes in ~30s.
-start_branch "${BRANCH_A}"
-cat > backend/test_multiply.py <<'PY'
-def test_multiply() -> None:
+# Ancestors A1..A4 — each uses a distinct op missing on main, failing SLOWLY.
+# skip_intermediate_results only promotes ancestors still pending (WAITING_FOR_CI);
+# a definitively-failed car parks the chain (NoSkipWithFailure). The ~300s sleep
+# keeps each ancestor pending until B's [A1..A4 + B] car passes and promotes them.
+for op in $OPS; do
+  br="skip-demo/use-$op"
+  start_branch "$br"
+  cat > "backend/test_$op.py" <<PY
+def test_$op() -> None:
     try:
-        from backend.calculator import multiply
+        from backend.calculator import $op
     except ImportError:
-        # A alone: multiply() missing — stall so the failure isn't definitive
-        # before the [A+B] car passes and skip_intermediate_results promotes A.
+        # Missing on main: stall so the failure stays non-definitive until B's
+        # combined car passes and skip_intermediate_results promotes this ancestor.
         import time
 
-        time.sleep(150)
+        time.sleep(300)
         raise
-    # A+B: multiply() exists — passes fast, no sleep.
-    assert multiply(2, 3) == 6
+    assert $op(2, 3) == 5
 PY
-open_pr "${BRANCH_A}" \
-  "feat(backend): use multiply()" \
-  "Uses \`multiply()\`, which doesn't exist on \`main\` yet — so **A alone fails, but slowly** (it stalls ~150s on the missing import). Its child PR (\`${BRANCH_B}\`) adds \`multiply()\`, so the \`[A+B]\` car passes in ~30s and \`skip_intermediate_results\` promotes A while its own check is still pending. Backend scope."
+  open_pr "$br" \
+    "feat(backend): use $op()" \
+    "Uses \`$op()\`, undefined on \`main\` — **fails slowly** (~300s) on its own. The fix PR (\`${FIX_BRANCH}\`) defines it. One of four ancestors promoted at once via \`skip_intermediate_results\`. Backend scope."
+done
 
-# PR B — backend, the fix (defines multiply); tested as A+B in the chain.
-start_branch "${BRANCH_B}"
+# B — defines every op. Queue LAST so its car is [A1..A4 + B]: it passes fast
+# (all ops present) and promotes all four still-pending ancestors together.
+start_branch "${FIX_BRANCH}"
 cat > backend/calculator.py <<'PY'
 def add(a: int, b: int) -> int:
     return a + b
 
 
-def multiply(a: int, b: int) -> int:
-    return a * b
-PY
-open_pr "${BRANCH_B}" \
-  "feat(backend): add multiply()" \
-  "Defines \`multiply()\`. Queued **after** PR A in the \`backend\` scope, so it's tested as **A+B**, goes green, and promotes A via \`skip_intermediate_results\`. Backend scope."
-
-# PR C — frontend, independent parallel scope (makes parallel mode visible).
-start_branch "${BRANCH_C}"
-cat > frontend/widget.py <<'PY'
-def greeting() -> str:
-    return "hello world"
-PY
-cat > frontend/test_widget.py <<'PY'
-from frontend.widget import greeting
+def op1(a: int, b: int) -> int:
+    return a + b
 
 
-def test_greeting() -> None:
-    assert greeting() == "hello world"
+def op2(a: int, b: int) -> int:
+    return a + b
+
+
+def op3(a: int, b: int) -> int:
+    return a + b
+
+
+def op4(a: int, b: int) -> int:
+    return a + b
 PY
-open_pr "${BRANCH_C}" \
-  "feat(frontend): greeting -> hello world" \
-  "Independent change in the \`frontend\` scope — runs as its own parallel car alongside the backend chain. Frontend scope."
+open_pr "${FIX_BRANCH}" \
+  "feat(backend): add op1..op4()" \
+  "Defines \`op1\`..\`op4\`. Queue this **last**: its car is tested on top of all four ancestors (\`[A1..A4 + B]\`), passes fast, and promotes all four still-pending ancestors at once via \`skip_intermediate_results\` — four 'Intermediate skipped' badges. Backend scope."
 
 echo
-echo "Done. Queue them in order (A -> B -> C):"
-echo "  gh pr edit <A> --add-label queue   # ${BRANCH_A}"
-echo "  gh pr edit <B> --add-label queue   # ${BRANCH_B}"
-echo "  gh pr edit <C> --add-label queue   # ${BRANCH_C}"
-echo "See scenarios/skip-intermediate-results/README.md for the live walkthrough."
+echo "Done. Reliable queue order (avoids the parent/child coin-flip):"
+echo "  1. label all four ancestors:"
+for op in $OPS; do echo "       gh pr edit <use-$op> --add-label queue"; done
+echo "  2. WAIT for all four to embark (each gets the 'queued' label)"
+echo "  3. THEN label the fix LAST:  gh pr edit <${FIX_BRANCH}> --add-label queue"
+echo "Watch the dashboard: when B's car goes green, all four ancestors flash the"
+echo "indigo 'Intermediate skipped' badge before merging."
