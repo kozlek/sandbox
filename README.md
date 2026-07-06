@@ -45,4 +45,4 @@ git push
 
 | Scenario | Tests | Status |
 |----------|-------|--------|
-| [skip-intermediate-results](./scenarios/skip-intermediate-results/) | `skip_intermediate_results` promotes a red ancestor car when its green child car passes, in `parallel` mode | ready to push |
+| [skip-intermediate-results](./scenarios/skip-intermediate-results/) | `skip_intermediate_results` promotes a still-pending ancestor when a downstream child car including it passes — never a failed one — in `parallel` mode | ready to push |
