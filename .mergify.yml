@@ -1,43 +1,21 @@
-# ACTIVE sandbox config. Current scenario: skip_intermediate_results in PARALLEL
-# mode via scope-dependency chains (MRGFY-7620).
-# Full walkthrough: scenarios/skip-intermediate-results/README.md
+# Command-queue stack cascade harness (MRGFY-8046 verification).
 #
-# - mode: parallel            -> PRs with disjoint scopes are tested in parallel.
-# - scopes.source.files       -> scope is derived from a PR's changed files.
-#                                A PR touching backend/** is in the `backend`
-#                                scope; frontend/** is in `frontend`.
-# - skip_intermediate_results -> within a scope chain, a passing CHILD car
-#                                promotes its not-yet-merged ANCESTORS, even if
-#                                an ancestor's own car failed.
+# Goal: reproduce the CUSTOMER's path, where stacked PRs enter the queue via the
+# `@mergifyio queue` COMMAND (event trigger "Command: queue"), NOT via auto-merge
+# on a label. The eager cascade fix (EAGER_STACK_QUEUE_CASCADE_ENABLED_ORGS)
+# only fast-forwards successors that have a pending queue COMMAND, so the harness
+# must command-queue, not auto-queue.
 #
-# PREREQUISITE: this org must be enabled in
-# SKIP_INTERMEDIATE_RESULTS_PARALLEL_ENABLED_ORGS, otherwise the config is
-# accepted but the parallel-mode skip never fires (see the scenario README).
-merge_queue:
-  mode: parallel
-  max_parallel_checks: 5
-  skip_intermediate_results: true
-
-scopes:
-  source:
-    files:
-      backend:
-        include:
-          - "backend/**"
-      frontend:
-        include:
-          - "frontend/**"
-
+# - No `merge_protections_settings.auto_merge_conditions` and no `queue_conditions`:
+#   a PR enters ONLY when `@mergifyio queue` is commented on it (or, for a stack,
+#   when a stack-mate's command pulls it in).
+# - batch_size 10 so a whole test stack fits a single batch.
+# - merge_conditions gate on a label we never add, so queued PRs stay in the
+#   queue for measurement and never actually merge (no runner burn, no dequeue).
 queue_rules:
   - name: default
-    # A PR only needs the `queue` label to ENTER the queue — deliberately no CI
-    # condition here, so the broken-on-its-own ancestor (PR A) can still embark.
-    queue_conditions:
-      - "label=queue"
-    # The merge gate, evaluated on each speculative car's CI:
     merge_conditions:
-      - "check-success=ci"
-    batch_size: 1
+      - "label=ready-to-merge"
+    batch_size: 10
+    batch_max_wait_time: 5 min
     merge_method: merge
-merge_protections_settings:
-  auto_merge_conditions: true
