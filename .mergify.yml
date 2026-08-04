@@ -1,21 +1,6 @@
-# Command-queue stack cascade harness (MRGFY-8046 verification).
-#
-# Goal: reproduce the CUSTOMER's path, where stacked PRs enter the queue via the
-# `@mergifyio queue` COMMAND (event trigger "Command: queue"), NOT via auto-merge
-# on a label. The eager cascade fix (EAGER_STACK_QUEUE_CASCADE_ENABLED_ORGS)
-# only fast-forwards successors that have a pending queue COMMAND, so the harness
-# must command-queue, not auto-queue.
-#
-# - No `merge_protections_settings.auto_merge_conditions` and no `queue_conditions`:
-#   a PR enters ONLY when `@mergifyio queue` is commented on it (or, for a stack,
-#   when a stack-mate's command pulls it in).
-# - batch_size 10 so a whole test stack fits a single batch.
-# - merge_conditions gate on a label we never add, so queued PRs stay in the
-#   queue for measurement and never actually merge (no runner burn, no dequeue).
+# Scenario: gh-stack bottom-merge via merge-async (GITHUB_STACK_BOTTOM_QUEUE_FOR_ORGS).
+# Entry via `@mergifyio queue` command only; no conditions so embarked PRs merge immediately.
 queue_rules:
   - name: default
-    merge_conditions:
-      - "label=ready-to-merge"
-    batch_size: 10
-    batch_max_wait_time: 5 min
-    merge_method: merge
+    merge_conditions: []
+    merge_method: squash
