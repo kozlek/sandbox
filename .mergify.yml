@@ -1,8 +1,5 @@
-# Scenario: MRGFY-8448 analysis — inplace freshening on a gh-stack bottom.
-# max_parallel_checks: 1 forces inplace checks so a commits-behind bottom
-# triggers the REST update-branch call.
-merge_queue:
-  max_parallel_checks: 1
+# Scenario: gh-stack bottom-merge via merge-async (GITHUB_STACK_BOTTOM_QUEUE_FOR_ORGS).
+# Entry via `@mergifyio queue` command only; no conditions so embarked PRs merge immediately.
 queue_rules:
   - name: default
     merge_conditions: []
