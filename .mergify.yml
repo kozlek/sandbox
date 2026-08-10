@@ -1,6 +1,26 @@
-# Scenario: gh-stack bottom-merge via merge-async (GITHUB_STACK_BOTTOM_QUEUE_FOR_ORGS).
-# Entry via `@mergifyio queue` command only; no conditions so embarked PRs merge immediately.
+# Scenario: full-stack queueing of a GitHub-native stack
+# (GITHUB_STACK_QUEUE_FOR_ORGS). Walkthrough:
+# scenarios/github-native-stack-full-queue/README.md
+#
+# - max_parallel_checks > 1 keeps checks in DRAFT mode ON PURPOSE. INPLACE mode
+#   rebases the user PR's own branch, which GitHub refuses for a stack member
+#   ("Updating a stacked PR's branch via this endpoint is not supported").
+#   DRAFT builds via POST /merges, unfenced since stacks went to public preview.
+# - merge_conditions is a MANUAL gate (`ci` posted with POST /statuses), so the
+#   bottom lands only when we say so and the survivor is provably still queued
+#   when GitHub restacks it. An empty merge_conditions merges on embark and
+#   races the survivor's own entry, which is the state we need to observe.
+# - batch_size 1 gives each member its own draft, so the bottom's batch and the
+#   survivor's batch are independent.
+merge_queue:
+  mode: parallel
+  max_parallel_checks: 5
+
 queue_rules:
   - name: default
-    merge_conditions: []
+    queue_conditions:
+      - "label=queue"
+    merge_conditions:
+      - "check-success=ci"
+    batch_size: 1
     merge_method: squash

@@ -16,3 +16,4 @@ says so and you swap the root config before running it.
 | Scenario | Tests |
 |----------|-------|
 | `skip-intermediate-results` | `skip_intermediate_results` in `parallel` mode (MRGFY-7620) |
+| `github-native-stack-full-queue` | `GITHUB_STACK_QUEUE_FOR_ORGS` — how GitHub restacks *queued* survivors (MRGFY-8468) |
