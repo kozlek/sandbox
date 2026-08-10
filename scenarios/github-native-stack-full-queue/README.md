@@ -58,12 +58,17 @@ scenarios/github-native-stack-full-queue/run.sh [N]     # N members, default 3
 Opens an N-member chain (`gh-fq-1` on `main`, `gh-fq-2` on `gh-fq-1`, …) and makes
 it a real native stack via `POST /repos/kozlek/sandbox/stacks`.
 
-Every member appends a function to the **same** file (`backend/chain.py`). That is
-deliberate — see "Results" below: with disjoint files GitHub only retargeted the
-survivor and never rewrote its head, so the shape the trust marks exist for never
-occurred. Overlapping content makes each survivor's branch genuinely diverge from
-the post-landing base. The appends stay rebase-clean, because member *i*'s commit
-adds its function after member *i-1*'s and the landed base already contains *i-1*'s.
+Every member appends a function to the **same** file (`backend/chain_<TAG>.py`). That
+is deliberate — see "Results" below. Overlapping content makes each survivor's branch
+genuinely diverge from the post-landing base, which is what exposes whether GitHub
+rebases the survivor or merely retargets it.
+
+It does **not** stay rebase-clean, and an earlier version of this file claimed it
+did. That claim assumed a rebase happens. When GitHub does not rebase, the survivor
+still carries the landed member's *original* commit while the base carries the same
+change as a *new* squash commit — merge-base predates both, so it is an add/add on the
+same region and it **conflicts**. Run 1 escaped only because its duplicated content
+was byte-identical, which git resolves silently.
 
 Two gotchas that cost time if you rediscover them:
 
@@ -138,13 +143,56 @@ keyed onto **one `main` train** even though #236's GitHub base was another PR's
 branch; each got its own draft; landings sequenced via the effective-bottom
 re-check. CI cost was N runs, not N(N+1)/2.
 
-**Not** confirmed, and the reason run 2 exists: this was the benign
+**Not** confirmed, and the reason the later runs exist: this was the
 **retarget-only** shape, which never reaches the queue's synchronize detector. No
-head rewrite means no trust mark was needed and #38244 would have been inert; and
-#236's checks had already passed 6s before the landing, so the stale-checks window
-was not exercised either. Notably #235 was *squash*-merged, so `main`'s tip was a
-new commit while #236's branch still carried #235's original commit — the case
-where a rebase looks most necessary — and GitHub still did not rebase.
+head rewrite means no trust mark was needed and #38244 would have been inert.
+
+### The campaign, and what discriminates the two shapes (2026-08-10)
+
+Same 3-member same-file fixture throughout; only the landing method varied.
+
+| Test | Landed by | Queued survivors | `head_ref_force_pushed` | Survivor |
+|---|---|---|---|---|
+| A | `kozlek` user token, server-default `merge_action` | no | ✅ +2s | **clean** |
+| B | `kozlek`, one call on the **top** member | — | n/a (no survivors) | all 3 merged in **1s** |
+| C | `kozlek` user token, `merge_action=direct_merge` | no | ✅ +2s | **clean** |
+| D | `mergify[bot]` via the merge queue | **yes** | ❌ absent | **`dirty`** |
+| E | `mergify[bot]` via the merge queue | **no** | ❌ absent | **`dirty`** |
+
+**A healthy landing is TWO GitHub actions**, visible in the survivor's issue
+timeline: `automatic_base_change_succeeded` (+1s), then `head_ref_force_pushed`
+(~2s later) which is the rebase. The cascade is batch-atomic — in test C *both*
+survivors' heads moved in the same 2s poll, including the one whose base had not
+changed.
+
+**The discriminator is who merges.** A user token gets the rebase; the
+`mergify[bot]` installation token does not — GitHub retargets and stops, leaving the
+survivor carrying the landed member's original commit, hence `dirty`. Two hypotheses
+were tested and **refuted**: `merge_action` (test C used the engine's `direct_merge`
+and still rebased) and queue involvement (test E had no queued survivors and no draft
+PRs and still failed to rebase). `automatic_base_change_succeeded` is GitHub's own
+event and its `actor` is merely whoever merged — it appears in every case, so it is
+not the signal; the *absence of the force-push* is.
+
+**Measured cascade-rebase latency: 3–4s** (bounded by a 2s poll). PR #38244 sizes its
+trust window at 15 minutes — ~225x that.
+
+**Consequences.**
+
+- On the App path GitHub produces **no head rewrite at all**, so the synchronize
+  detector never fires and #38244 has nothing to absorb. Its premise does not hold
+  for the path customers actually use. Caveat kept deliberately: production SQL did
+  record rewrites 6.6–13.2s after landings, and users merge the large majority of
+  native-stack members in production, so those rewrites are plausibly user landings
+  — worth confirming before treating this as universal, and worth re-testing whenever
+  GitHub changes preview behaviour, since the asymmetry looks like a bug not a
+  contract.
+- The **real** blocker for full-stack queueing is the missing rebase: the survivor
+  conflicts, is dequeued, and burns a CI run. Reproduced 2/2 on the Mergify path.
+- **Atomic landing eliminates it** (test B): one `merge-async` call on the top member
+  lands every member below it, so there are no survivors, no restack, and no conflict.
+  That item is filed under "known limits" in #38245's merged message; on this evidence
+  it is a prerequisite for stacks deeper than 2, not a nicety.
 
 ## Teardown
 
