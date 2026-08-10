@@ -3,7 +3,16 @@
 # Submit GitHub's asynchronous Merge API for one pull request and poll to a
 # terminal state, printing each observed status with a timestamp.
 #
-#   merge-async.sh <pr> [merge_method]      merge_method: squash (default) | merge | rebase
+#   merge-async.sh <pr> [merge_method] [merge_action]
+#       merge_method: squash (default) | merge | rebase
+#       merge_action: default (server default) | direct_merge
+#
+# merge_action is NOT cosmetic. The engine hard-codes "direct_merge"
+# (merge_helpers.py) because "default" silently hands the PR to GitHub's OWN
+# merge queue on a queue-required branch. The open question this flag exists to
+# probe: whether "direct_merge" also skips GitHub's stack-aware restack of the
+# survivors, which would explain why a queue-driven landing left them merely
+# retargeted (and conflicted) while a "default" landing rebased them clean.
 #
 # Semantics that matter for the landing-mode experiment: merge-async merges
 # "every PR up to and including the one you request" -- so calling it on the TOP
@@ -19,10 +28,12 @@ set -uo pipefail
 REPO="${REPO:-kozlek/sandbox}"
 PR="${1:?usage: merge-async.sh <pr> [merge_method]}"
 METHOD="${2:-squash}"
+ACTION="${3:-}"
 
-echo "$(date -u +%H:%M:%SZ)  submit  #${PR}  merge_method=${METHOD}"
-resp=$(gh api -X PUT "repos/${REPO}/pulls/${PR}/merge-async" \
-  -f "merge_method=${METHOD}" 2>&1)
+echo "$(date -u +%H:%M:%SZ)  submit  #${PR}  merge_method=${METHOD} merge_action=${ACTION:-<server default>}"
+args=(-f "merge_method=${METHOD}")
+[ -n "${ACTION}" ] && args+=(-f "merge_action=${ACTION}")
+resp=$(gh api -X PUT "repos/${REPO}/pulls/${PR}/merge-async" "${args[@]}" 2>&1)
 rc=$?
 echo "  raw: ${resp}"
 if [ $rc -ne 0 ]; then
@@ -35,10 +46,10 @@ try:
     d = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
-# field name is not documented; take whatever looks like the handle
-for k in ("uuid", "id", "merge_uuid", "session_id"):
-    if isinstance(d, dict) and d.get(k):
-        print(d[k]); break
+# the handle lives at details.uuid, NOT top level (verified live 2026-08-10)
+if isinstance(d, dict):
+    det = d.get("details") or {}
+    print(det.get("uuid") or d.get("uuid") or "")
 ')
 
 if [ -z "$uuid" ]; then
