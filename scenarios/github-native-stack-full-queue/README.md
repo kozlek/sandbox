@@ -25,7 +25,14 @@ gap is what sizes two open engine decisions:
 
 ## Why DRAFT checks, not INPLACE
 
-`max_parallel_checks: 5` keeps checks in DRAFT mode deliberately.
+The config carries **no `merge_queue:` block at all**, and that is what keeps
+checks in DRAFT mode: `max_parallel_checks` defaults to 5, and
+`should_run_checks_inplace` requires it to be exactly 1 (along with
+`batch_size.max == 1`, `max_checks_retries == 0` and `mode == "serial"`), so the
+default alone rules INPLACE out. Spelling `mode: parallel` explicitly would also
+demand a `scopes.source` this scenario has no use for — the config is rejected
+outright without one (`scopes.source must be configured … when using merge_queue
+mode 'parallel'`).
 
 INPLACE mode rebases the **user PR's own branch**, and GitHub refuses that for a
 stack member — `Updating a stacked PR's branch via this endpoint is not
@@ -78,12 +85,17 @@ Then:
    This is the whole point — the survivor must be queued *before* the bottom
    lands, or the run measures nothing.
 
-4. **Release the bottom's gate only then.** `merge_conditions` is a manual `ci`
-   status, so nothing merges until you post it. In DRAFT mode the status belongs
-   on the **draft batch PR's head SHA**, not the member's:
+4. **The gate satisfies itself.** `merge_conditions: ["check-success=ci"]` binds
+   to the repo's own `ci` workflow (`.github/workflows`, triggered on
+   `pull_request`), which runs on the **draft batch PR** and passes in ~11s. So
+   the bottom lands on its own — you do not post anything, but you do have only
+   that ~11s of draft-build-plus-CI to get the upper embarked, which is why step 3
+   matters. If a run keeps racing, force the gate under your own control by
+   pointing `merge_conditions` at a context no workflow produces (e.g.
+   `check-success=manual-gate`) and posting it yourself:
    ```bash
    gh api repos/kozlek/sandbox/statuses/<draft-head-sha> \
-     -f state=success -f context=ci
+     -f state=success -f context=manual-gate
    ```
 
 5. **Read the transitions.** `watch.sh` starts its clock at the first observed

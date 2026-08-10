@@ -2,20 +2,22 @@
 # (GITHUB_STACK_QUEUE_FOR_ORGS). Walkthrough:
 # scenarios/github-native-stack-full-queue/README.md
 #
-# - max_parallel_checks > 1 keeps checks in DRAFT mode ON PURPOSE. INPLACE mode
-#   rebases the user PR's own branch, which GitHub refuses for a stack member
-#   ("Updating a stacked PR's branch via this endpoint is not supported").
-#   DRAFT builds via POST /merges, unfenced since stacks went to public preview.
-# - merge_conditions is a MANUAL gate (`ci` posted with POST /statuses), so the
-#   bottom lands only when we say so and the survivor is provably still queued
-#   when GitHub restacks it. An empty merge_conditions merges on embark and
-#   races the survivor's own entry, which is the state we need to observe.
-# - batch_size 1 gives each member its own draft, so the bottom's batch and the
-#   survivor's batch are independent.
-merge_queue:
-  mode: parallel
-  max_parallel_checks: 5
-
+# No `merge_queue:` block ON PURPOSE — the defaults are what this scenario wants:
+#
+# - max_parallel_checks defaults to 5, which is what keeps checks in DRAFT mode.
+#   INPLACE mode rebases the user PR's own branch, and GitHub refuses that for a
+#   stack member ("Updating a stacked PR's branch via this endpoint is not
+#   supported"); DRAFT builds via POST /merges, unfenced since stacks went to
+#   public preview, and never touches the member's branch. `should_run_checks_inplace`
+#   needs max_parallel_checks == 1 among other things, so the default alone
+#   guarantees DRAFT.
+# - Spelling `mode: parallel` here would additionally require `scopes.source`,
+#   which this scenario has no use for.
+#
+# merge_conditions gates on the repo's own `ci` workflow (.github/workflows), so
+# the bottom does not merge the instant it embarks -- an empty merge_conditions
+# merges on embark and races the survivor's own queue entry, which is exactly the
+# state this scenario exists to observe.
 queue_rules:
   - name: default
     queue_conditions:
