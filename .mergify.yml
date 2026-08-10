@@ -18,8 +18,16 @@
 # the bottom does not merge the instant it embarks -- an empty merge_conditions
 # merges on embark and races the survivor's own queue entry, which is exactly the
 # state this scenario exists to observe.
+#
+# autoqueue is what makes `queue_conditions` actually admit a pull request without
+# a `pull_request_rules` queue action (which would need the workflow_automation
+# product). It is also load-bearing for the observation: after a restack dequeues
+# a survivor, autoqueue RE-ADMITS it, which is the churn half of the prediction --
+# with command-only entry the survivor would simply stay out and we would only see
+# half the cycle.
 queue_rules:
   - name: default
+    autoqueue: true
     queue_conditions:
       - "label=queue"
     merge_conditions:
