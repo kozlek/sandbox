@@ -3,21 +3,28 @@
 # Scenario: full-stack queueing of a GitHub-native stack. main is never touched
 # by this script (the root .mergify.yml swap is a separate, deliberate commit).
 #
-#   run.sh [N]       open an N-member stack (default 3, minimum 2)
+#   run.sh [N] [TAG] open an N-member stack (default 3, minimum 2)
+#                    TAG namespaces the fixture file so repeated runs do not
+#                    collide with what a previous run merged into main.
 #   run.sh --reset   close the fixtures + delete their branches
 #
 # Builds an N-member GitHub-native stack, each member based on the one below it:
 #   gh-fq-1 -> main, gh-fq-2 -> gh-fq-1, ... gh-fq-N -> gh-fq-(N-1)
 # then makes them a real native stack with POST /repos/{o}/{r}/stacks.
 #
-# EVERY MEMBER APPENDS TO THE SAME FILE (backend/chain.py) on purpose. Run 1 used
-# disjoint files and GitHub only RETARGETED the survivor -- head SHA untouched, so
-# the queue's synchronize detector was never reached and the cascade-rebase shape
+# EVERY MEMBER APPENDS TO THE SAME FILE (backend/chain_<TAG>.py) on purpose. Run 1
+# used disjoint files and GitHub only RETARGETED the survivor -- head SHA untouched,
+# so the queue's synchronize detector was never reached and the cascade-rebase shape
 # (the one PR #38244/#38246 exist for) went unobserved. Overlapping content makes
-# each member's branch genuinely diverge from the post-landing base, which is the
-# condition most likely to force a real rebase. Appends stay REBASE-CLEAN: member
-# i's commit adds its own function after member i-1's, and the landed base already
-# contains i-1's, so replaying i applies without conflict.
+# each member's branch genuinely diverge from the post-landing base.
+#
+# It does NOT stay rebase-clean, and an earlier version of this comment claimed it
+# did. That claim assumed a rebase happens. It does not: GitHub only retargets, so
+# after a SQUASH landing the base carries the bottom's changes as a NEW commit while
+# the survivor's branch still carries the bottom's ORIGINAL commit. merge-base is the
+# pre-landing base, which has the file not at all -- so it is an add/add on the same
+# region and it CONFLICTS. Run 1 escaped only because its duplicated content was
+# byte-identical, which git resolves silently. See README "Results".
 #
 # Requires git + gh (authenticated as kozlek). See README.md for the walkthrough.
 
@@ -59,6 +66,8 @@ if [ "${1:-}" = "--reset" ]; then
 fi
 
 N="${1:-3}"
+TAG="${2:-$(date -u +%H%M%S)}"
+CHAIN="backend/chain_${TAG}.py"
 if ! [ "$N" -ge 2 ] 2>/dev/null; then
   echo "Member count must be an integer >= 2 (POST /stacks refuses a single-PR stack)." >&2
   exit 1
@@ -86,10 +95,10 @@ for i in $(seq 1 "$N"); do
   # Same file for every member — see the header note on why this matters.
   mkdir -p backend
   if [ "$i" -eq 1 ]; then
-    printf '"""Chain fixture: one function appended per stack member."""\n' \
-      > backend/chain.py
+    printf '"""Chain fixture (%s): one function appended per stack member."""\n' \
+      "${TAG}" > "${CHAIN}"
   fi
-  cat >> backend/chain.py <<PY
+  cat >> "${CHAIN}" <<PY
 
 
 def link_${i}() -> int:
@@ -101,7 +110,7 @@ PY
   git push -fq origin "$branch"
   pr=$(gh pr create --repo "${REPO}" --base "${parent_base}" --head "$branch" \
     --title "exp(fq): member ${i} of ${N}" \
-    --body "Member ${i} of an ${N}-member GitHub-native stack. Appends \`link_${i}()\` to \`backend/chain.py\` — every member touches the SAME file so the survivors genuinely diverge from the post-landing base." \
+    --body "Member ${i} of an ${N}-member GitHub-native stack. Appends \`link_${i}()\` to \`${CHAIN}\` — every member touches the SAME file so the survivors genuinely diverge from the post-landing base." \
     | sed 's#.*/##')
   PRS+=("$pr")
   echo "  opened member ${i}: #${pr} (${branch}, base ${parent_base})"
@@ -117,7 +126,7 @@ echo "Creating the native stack over ${PRS[*]}..."
 args=()
 for pr in "${PRS[@]}"; do args+=(-F "pull_requests[]=${pr}"); done
 STACK=$(gh api "repos/${REPO}/stacks" "${args[@]}" --jq '.number')
-echo "  stack #${STACK}"
+echo "  stack #${STACK}  (fixture file ${CHAIN})"
 
 echo
 echo "Queue every member, bottom-up:"
