@@ -3,22 +3,30 @@
 # Scenario: full-stack queueing of a GitHub-native stack. main is never touched
 # by this script (the root .mergify.yml swap is a separate, deliberate commit).
 #
-# Builds a 2-member GitHub-native stack:
-#   1 (bottom) -> base main
-#   2 (upper)  -> base <bottom branch>, so it physically chains
+#   run.sh [N]       open an N-member stack (default 3, minimum 2)
+#   run.sh --reset   close the fixtures + delete their branches
+#
+# Builds an N-member GitHub-native stack, each member based on the one below it:
+#   gh-fq-1 -> main, gh-fq-2 -> gh-fq-1, ... gh-fq-N -> gh-fq-(N-1)
 # then makes them a real native stack with POST /repos/{o}/{r}/stacks.
 #
-#   run.sh           open the PRs and create the stack
-#   run.sh --reset   close them + delete their branches
+# EVERY MEMBER APPENDS TO THE SAME FILE (backend/chain.py) on purpose. Run 1 used
+# disjoint files and GitHub only RETARGETED the survivor -- head SHA untouched, so
+# the queue's synchronize detector was never reached and the cascade-rebase shape
+# (the one PR #38244/#38246 exist for) went unobserved. Overlapping content makes
+# each member's branch genuinely diverge from the post-landing base, which is the
+# condition most likely to force a real rebase. Appends stay REBASE-CLEAN: member
+# i's commit adds its own function after member i-1's, and the landed base already
+# contains i-1's, so replaying i applies without conflict.
 #
 # Requires git + gh (authenticated as kozlek). See README.md for the walkthrough.
 
 set -euo pipefail
 
 BASE="main"
-BRANCH_1="gh-fq-1"
-BRANCH_2="gh-fq-2"
 REPO="kozlek/sandbox"
+PREFIX="gh-fq"
+MAX_TEARDOWN=12   # teardown sweeps a generous range so any past run is cleaned
 
 cd "$(dirname "$0")/../.."
 
@@ -32,10 +40,12 @@ close_pr_for() {  # $1 = head branch — best-effort
 }
 
 teardown() {
-  echo "Closing scenario PRs and deleting branches..."
-  # Upper first: deleting the bottom's branch while the upper still targets it
-  # CLOSES the upper outright (base_ref_deleted), which muddies a re-run.
-  for b in "${BRANCH_2}" "${BRANCH_1}"; do
+  echo "Closing scenario PRs and deleting branches (top-down)..."
+  # Top-down on purpose: deleting a lower member's branch while an upper still
+  # targets it CLOSES the upper outright (base_ref_deleted), which makes the next
+  # run's state confusing.
+  for i in $(seq "${MAX_TEARDOWN}" -1 1); do
+    b="${PREFIX}-${i}"
     close_pr_for "$b"
     git push origin --delete "$b" >/dev/null 2>&1 || true
     git branch -D "$b" >/dev/null 2>&1 || true
@@ -48,60 +58,71 @@ if [ "${1:-}" = "--reset" ]; then
   exit 0
 fi
 
+N="${1:-3}"
+if ! [ "$N" -ge 2 ] 2>/dev/null; then
+  echo "Member count must be an integer >= 2 (POST /stacks refuses a single-PR stack)." >&2
+  exit 1
+fi
+
 git fetch -q origin "${BASE}"
 git checkout -q "${BASE}"
 git pull -q --ff-only origin "${BASE}" || true
 
-# --- bottom -------------------------------------------------------------------
-close_pr_for "${BRANCH_1}"
-git branch -D "${BRANCH_1}" >/dev/null 2>&1 || true
-git checkout -q -B "${BRANCH_1}" "origin/${BASE}"
-cat > backend/fq_bottom.py <<'PY'
-def fq_bottom() -> str:
-    return "bottom"
-PY
-git add -A
-git commit -q -m "exp(fq): bottom member"
-git push -fq origin "${BRANCH_1}"
-PR_1=$(gh pr create --repo "${REPO}" --base "${BASE}" --head "${BRANCH_1}" \
-  --title "exp(fq): bottom member" \
-  --body "Bottom of a 2-member GitHub-native stack. Full-stack queueing scenario." \
-  | sed 's#.*/##')
-echo "  opened bottom: #${PR_1} (${BRANCH_1})"
+PRS=()
+for i in $(seq 1 "$N"); do
+  branch="${PREFIX}-${i}"
+  if [ "$i" -eq 1 ]; then
+    parent_ref="origin/${BASE}"
+    parent_base="${BASE}"
+  else
+    parent_ref="${PREFIX}-$((i - 1))"
+    parent_base="${PREFIX}-$((i - 1))"
+  fi
 
-# --- upper, chained onto the bottom ------------------------------------------
-close_pr_for "${BRANCH_2}"
-git branch -D "${BRANCH_2}" >/dev/null 2>&1 || true
-git checkout -q -B "${BRANCH_2}" "${BRANCH_1}"
-cat > backend/fq_upper.py <<'PY'
-def fq_upper() -> str:
-    return "upper"
+  close_pr_for "$branch"
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  git checkout -q -B "$branch" "$parent_ref"
+
+  # Same file for every member — see the header note on why this matters.
+  mkdir -p backend
+  if [ "$i" -eq 1 ]; then
+    printf '"""Chain fixture: one function appended per stack member."""\n' \
+      > backend/chain.py
+  fi
+  cat >> backend/chain.py <<PY
+
+
+def link_${i}() -> int:
+    return ${i}
 PY
-git add -A
-git commit -q -m "exp(fq): upper member"
-git push -fq origin "${BRANCH_2}"
-PR_2=$(gh pr create --repo "${REPO}" --base "${BRANCH_1}" --head "${BRANCH_2}" \
-  --title "exp(fq): upper member" \
-  --body "Upper member, chained onto #${PR_1}. Full-stack queueing scenario." \
-  | sed 's#.*/##')
-echo "  opened upper:  #${PR_2} (${BRANCH_2})"
+
+  git add -A
+  git commit -q -m "exp(fq): member ${i} of ${N}"
+  git push -fq origin "$branch"
+  pr=$(gh pr create --repo "${REPO}" --base "${parent_base}" --head "$branch" \
+    --title "exp(fq): member ${i} of ${N}" \
+    --body "Member ${i} of an ${N}-member GitHub-native stack. Appends \`link_${i}()\` to \`backend/chain.py\` — every member touches the SAME file so the survivors genuinely diverge from the post-landing base." \
+    | sed 's#.*/##')
+  PRS+=("$pr")
+  echo "  opened member ${i}: #${pr} (${branch}, base ${parent_base})"
+done
 
 git checkout -q "${BASE}"
 
 # --- make it a real GitHub-native stack --------------------------------------
 # `-F` sends typed ints; plain `-f` sends strings and the endpoint 422s.
-# POST /stacks needs >= 2 pull requests (single-PR stacks are no longer
-# creatable). Undocumented preview endpoint — no special Accept header needed.
-echo "Creating the native stack over #${PR_1} + #${PR_2}..."
-STACK=$(gh api "repos/${REPO}/stacks" \
-  -F "pull_requests[]=${PR_1}" \
-  -F "pull_requests[]=${PR_2}" \
-  --jq '.number')
+# POST /stacks needs >= 2 pull requests (single-PR stacks are no longer creatable).
+# Undocumented preview endpoint — no special Accept header needed.
+echo "Creating the native stack over ${PRS[*]}..."
+args=()
+for pr in "${PRS[@]}"; do args+=(-F "pull_requests[]=${pr}"); done
+STACK=$(gh api "repos/${REPO}/stacks" "${args[@]}" --jq '.number')
 echo "  stack #${STACK}"
 
 echo
-echo "Queue bottom-up, and hold the gate until BOTH are embarked:"
-echo "  gh pr edit ${PR_1} --repo ${REPO} --add-label queue"
-echo "  gh pr edit ${PR_2} --repo ${REPO} --add-label queue"
-echo "Then watch, and only release the bottom's gate once the upper is queued:"
-echo "  scenarios/github-native-stack-full-queue/watch.sh ${PR_1} ${PR_2}"
+echo "Queue every member, bottom-up:"
+for pr in "${PRS[@]}"; do
+  echo "  gh pr edit ${pr} --repo ${REPO} --add-label queue"
+done
+echo "Arm the instrument FIRST, then label:"
+echo "  scenarios/github-native-stack-full-queue/watch.sh ${PRS[*]}"

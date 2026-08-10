@@ -52,11 +52,18 @@ scenario in INPLACE mode.
 ## Walkthrough
 
 ```bash
-scenarios/github-native-stack-full-queue/run.sh
+scenarios/github-native-stack-full-queue/run.sh [N]     # N members, default 3
 ```
 
-Opens a 2-member chain (`gh-fq-1` on `main`, `gh-fq-2` on `gh-fq-1`) and makes it
-a real native stack via `POST /repos/kozlek/sandbox/stacks`.
+Opens an N-member chain (`gh-fq-1` on `main`, `gh-fq-2` on `gh-fq-1`, …) and makes
+it a real native stack via `POST /repos/kozlek/sandbox/stacks`.
+
+Every member appends a function to the **same** file (`backend/chain.py`). That is
+deliberate — see "Results" below: with disjoint files GitHub only retargeted the
+survivor and never rewrote its head, so the shape the trust marks exist for never
+occurred. Overlapping content makes each survivor's branch genuinely diverge from
+the post-landing base. The appends stay rebase-clean, because member *i*'s commit
+adds its function after member *i-1*'s and the landed base already contains *i-1*'s.
 
 Two gotchas that cost time if you rediscover them:
 
@@ -110,6 +117,34 @@ Then:
    are no trust marks, so the expected outcome is that the survivor is
    **dequeued** (`PullRequestUpdated`) and re-admitted by its rules. Confirm in
    the event log / dashboard rather than inferring it.
+
+## Results
+
+### Run 1 — 2 members, disjoint files, squash (2026-08-10)
+
+Full-stack queueing worked end to end, and **the restack never rewrote a head**.
+
+| Time | Event |
+|---|---|
+| 08:32:24 | #235 embarked (train `main`, rule `autoqueue`, draft #238) |
+| 08:32:31 | #236 embarked — **+7s**, train `main`, draft #239 |
+| 08:33:42 | #236's draft checks passed — *before* the landing |
+| 08:33:48 | #235 merged (squash, `329f0b9e63`) |
+| +0s | #236 **RETARGET** `gh-fq-1` → `main`, **head UNCHANGED** |
+| 08:34:10 | #236 merged (`7de051fa58`), 22s after the bottom |
+
+Confirmed: members admitted bottom-up one hop per evaluation; same-stack members
+keyed onto **one `main` train** even though #236's GitHub base was another PR's
+branch; each got its own draft; landings sequenced via the effective-bottom
+re-check. CI cost was N runs, not N(N+1)/2.
+
+**Not** confirmed, and the reason run 2 exists: this was the benign
+**retarget-only** shape, which never reaches the queue's synchronize detector. No
+head rewrite means no trust mark was needed and #38244 would have been inert; and
+#236's checks had already passed 6s before the landing, so the stale-checks window
+was not exercised either. Notably #235 was *squash*-merged, so `main`'s tip was a
+new commit while #236's branch still carried #235's original commit — the case
+where a rebase looks most necessary — and GitHub still did not rebase.
 
 ## Teardown
 
