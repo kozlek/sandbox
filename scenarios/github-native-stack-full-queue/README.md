@@ -194,6 +194,42 @@ trust window at 15 minutes — ~225x that.
   That item is filed under "known limits" in #38245's merged message; on this evidence
   it is a prerequisite for stacks deeper than 2, not a nicety.
 
+### Test F — what one merge-async call writes as commit messages (2026-08-11)
+
+Sizes the "batch the stack, land it with one merge-async" design: does a single
+call preserve the engine's per-PR commit message? Fresh 3-member stack
+(#272 → #273 → #274), one `merge_method=squash merge_action=direct_merge` call on
+the **top** member, carrying an explicit `commit_title`/`commit_message` that
+matched no PR.
+
+Merged in **~3s**, all three, bottom-first, no survivors.
+
+| Landed commit | PR | Subject | Body |
+|---|---|---|---|
+| `5e54f29` | #272 (bottom) | `exp(fq): member 1 of 3 (#272)` | *(repo default)* |
+| `4a3304c` | #273 | `exp(fq): member 2 of 3 (#273)` | *(repo default)* |
+| `0accedb` | #274 (**requested**) | `CUSTOM-TITLE-FROM-PAYLOAD (#999)` | the payload's |
+
+**The payload's message applies ONLY to the requested pull request.** Every
+member below it gets GitHub's repo-level rendering
+(`squash_merge_commit_title=COMMIT_OR_PR_TITLE`, `…_message=COMMIT_MESSAGES`),
+per PR — each with its own number, so they are not clones of the top.
+
+That is a narrower problem than it first looks, because on **default config the
+engine sends no message at all**: `commit_message_renderer.resolve` returns
+`(None, None)` when neither `commit_message_template` nor
+`commit_message_format` is set (and no in-body `# Commit Message` section), and
+the merge helper then omits both fields so GitHub's repo default renders — the
+same rendering the members below just got. So a single call is **byte-identical
+to N individual merges on default config**; the divergence is confined to
+configs that set a template/format, and there only for the N-1 members below
+the requested one.
+
+Second unknown, also answered: **each PR carries its own correct
+`merge_commit_sha`** (and its own `merged_at`, 1s apart) even though the result
+object reports only the top's `details.sha`. Per-PR bookkeeping therefore just
+needs a re-read of each member, not a derivation.
+
 ## Teardown
 
 ```bash
