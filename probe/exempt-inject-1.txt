@@ -1,0 +1,1 @@
+MRGFY-8588 probe: does an exempt ruleset still inject its rules as merge conditions?
