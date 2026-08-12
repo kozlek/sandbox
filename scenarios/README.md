@@ -17,3 +17,4 @@ says so and you swap the root config before running it.
 |----------|-------|
 | `skip-intermediate-results` | `skip_intermediate_results` in `parallel` mode (MRGFY-7620) |
 | `github-native-stack-full-queue` | `GITHUB_STACK_QUEUE_FOR_ORGS` — how GitHub restacks *queued* survivors (MRGFY-8468) |
+| `exempt-ruleset-injection` | a ruleset with an `exempt` Mergify bypass still injects its rules as conditions (MRGFY-8588) |
