@@ -230,6 +230,60 @@ Second unknown, also answered: **each PR carries its own correct
 object reports only the top's `details.sha`. Per-PR bookkeeping therefore just
 needs a re-read of each member, not a derivation.
 
+### Run 2 — 3 members, same file, squash, under an EXEMPT ruleset (2026-08-12)
+
+First run with a repository ruleset in play: `main-required-ci` (id `20739927`),
+`enforcement: active` on `~DEFAULT_BRANCH`, one rule `required_status_checks`
+(context `ci`), and the Mergify app (Integration `10562`) as a bypass actor in
+**`exempt`** mode — the only mode GitHub's merge-async honours (MRGFY-8537).
+
+Stack #280 = #277 → #278 → #279, fixture `backend/chain_101506.py`.
+
+| Time (UTC) | Event |
+|---|---|
+| 10:15:57 | all three labelled `queue` |
+| 10:16 | all three admitted to **one `main` train**; drafts #281 (`#277`), #282 (`#277+#278`), #283 (all three) |
+| 10:18:36 | **#277 merged** via merge-async (`1334a082bc`) — the exempt ruleset did **not** block it |
+| +0s | #278 **RETARGET** `gh-fq-1` → `main`, **head UNCHANGED** — no force-push, no rebase |
+| +18s | #278 `CONFLICTING/DIRTY` |
+| 10:21 | **both survivors dequeued** — #278 `Queue conditions are not satisfied: -conflict`; #279 `conflict with base branch` |
+| 10:26 | settled: both carry `dequeued`, no drafts open, **no autoqueue re-admission** |
+
+**Net: 1 of 3 landed.** The stack is stuck and the survivors need a manual rebase.
+
+Two things this run establishes that the earlier campaign could not:
+
+- **The exempt bypass works end to end.** With an active ruleset on `main`, the
+  stack bottom merged through merge-async with no refusal and no
+  `Cannot update this protected ref.` — MRGFY-8590's pre-check stayed silent,
+  which is the correct outcome for `exempt`.
+- **Condition injection is live and visible.** #278's dequeue summary carried the
+  injected ruleset condition, in the shape the OR-group builder produces:
+
+  ```
+  - [X] any of [🛡 GitHub repository ruleset rule `main-required-ci`]:
+    - [X] `check-success = ci`
+    - [ ] `check-neutral = ci`
+    - [ ] `check-skipped = ci`
+  ```
+
+  This is the first live observation of `FORCE_EXEMPTED_RULESET_CONDITIONS_INJECTION`
+  since it went `*` (2026-08-12 09:06 UTC) — `kozlek` carries no `excluded` row,
+  so it injects.
+
+**And it re-confirms the blocker, now with the queue actually holding survivors.**
+The retarget-only shape reproduced exactly as tests D/E predicted: the
+`mergify[bot]` installation token gets no cascade rebase, so the survivor keeps
+the landed member's original commit while `main` carries it as a new squash
+commit — an add/add conflict on the same region. Disjoint-file stacks (Run 1)
+escape this; same-file stacks — which is what a real stack usually is — do not.
+
+The fix is atomic run landing (MRGFY-8470, PR **#38508**, still open): one
+merge-async call on the top member lands every member below it, so there are no
+survivors and no restack. Test F already measured that path at ~3s for 3 members.
+Until #38508 ships, whole-stack **queueing** works and whole-stack **landing**
+does not.
+
 ## Teardown
 
 ```bash
