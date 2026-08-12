@@ -7,3 +7,7 @@ def link_1() -> int:
 
 def link_2() -> int:
     return 2
+
+
+def link_3() -> int:
+    return 3
