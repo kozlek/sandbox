@@ -32,5 +32,5 @@ queue_rules:
       - "label=queue"
     merge_conditions:
       - "check-success=ci"
-    batch_size: 1
+    batch_size: 3
     merge_method: squash
