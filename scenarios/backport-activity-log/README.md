@@ -27,18 +27,25 @@ no CI.
 scenarios/backport-activity-log/run.sh
 ```
 
-It opens a PR against `bp/trunk`, merges it, then comments:
+It opens a PR against `bp/trunk`, merges it, then posts two comments:
 
 ```
-@mergifyio backport bp/stable bp/legacy
+@mergifyio backport bp/stable
+@mergifyio backport bp/legacy
 ```
 
 `bp/stable` exists. `bp/legacy` does not, standing in for a branch deleted
 after the backport rule was written.
 
-1. On the PR, Mergify's command reply reports one success and one failure: a
-   backport PR opened against `bp/stable`, and `bp/legacy` failed. That part
-   was always right; the check run never lied.
+1. On the PR, the first reply links the backport PR opened against
+   `bp/stable`. The second says the backport to `bp/legacy` failed with
+   `Branch not found`. That part was always right; the check run never lied.
+
+   The two commands are separate on purpose. A single
+   `backport bp/stable bp/legacy` reply is titled "❌ No backport have been
+   created" as soon as one target fails, with the created PR listed right
+   under that title (`copy.py`, older than this fix; seen in rehearsal
+   kozlek/sandbox#324).
 2. Open the activity log:
    <https://dashboard.mergify.com/orgs/kozlek/repos/sandbox/activity-log>
    - **One** entry: "Backported to bp/stable", pointing at the new backport PR.

@@ -67,6 +67,42 @@ Failing checks:
 
 It named `ci`, which went on to pass, and never mentioned `security-scan`.
 
+### Known issue that shows up in this demo
+
+Rehearsed 2026-09-18 (kozlek/sandbox#323): the reason lists **two** checks:
+
+```
+- `Mergify Merge Protections`
+- `security-scan`
+```
+
+`Mergify Merge Protections` did not fail. It is `neutral` ("No merge
+protections matched"). Mergify injects it as a gate that passes on
+`success`, `neutral` *or* `skipped`, but the failing-check finder reads each
+branch of that `or` on its own. It sees `check-success` false, and names the
+check. This is the "or-group" gap left open by MRGFY-8607. The same bug already
+affected the merge queue's own path; the cancel path now inherits it.
+
+In production, since 2026-09-08 about 100–150 checks-failed dequeues a day
+(1 in 6, 86 orgs) name `Mergify Merge Protections`. Before, it was 60–100 a
+day, with another 100–150 a day naming no check at all.
+
+Either say it out loud ("the next fix is already visible here"), or stage around
+it with a merge protection that *succeeds* on this PR. The check is then
+`success`, and the `or` is decided without it:
+
+```yaml
+merge_protections:
+  - name: checks-demo
+    if:
+      - base = fca/trunk
+    success_conditions:
+      - label = checks-demo
+```
+
+Also slightly off in the same comment: its timeline says "❌ Checks failed · on
+draft #N", though the check that failed was on the PR, not the draft.
+
 ### Optional second beat (#38516)
 
 The same list used to print a condition's operand as if it were a check name.
