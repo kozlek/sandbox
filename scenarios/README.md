@@ -18,3 +18,6 @@ says so and you swap the root config before running it.
 | `skip-intermediate-results` | `skip_intermediate_results` in `parallel` mode (MRGFY-7620) |
 | `github-native-stack-full-queue` | `GITHUB_STACK_QUEUE_FOR_ORGS` — how GitHub restacks *queued* survivors (MRGFY-8468) |
 | `exempt-ruleset-injection` | a ruleset with an `exempt` Mergify bypass still injects its rules as conditions (MRGFY-8588) |
+| `failing-check-attribution` | a checks-failed dequeue names the failed check, not one still running (MRGFY-8607) |
+| `backport-activity-log` | the activity log records a backport only when one happened (MRGFY-8674, MRGFY-9158) |
+| `workflows-permission-probe` | what GitHub refuses an app without `workflows`, the basis of MRGFY-9180 |

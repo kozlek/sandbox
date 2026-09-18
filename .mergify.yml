@@ -34,3 +34,17 @@ queue_rules:
       - "check-success=ci"
     batch_size: 3
     merge_method: squash
+
+  # scenarios/failing-check-attribution. Only a `checks-demo` label routes a PR
+  # here, so the stack scenarios above are unaffected. `security-scan` is a
+  # commit status the scenario script posts; it sits in queue_conditions, which
+  # are evaluated on the user PR, while `ci` runs on the draft -- that split is
+  # what the scenario needs to show which of the two gets blamed.
+  - name: checks-demo
+    autoqueue: true
+    queue_conditions:
+      - "label=checks-demo"
+      - "check-success=security-scan"
+    merge_conditions:
+      - "check-success=ci"
+    merge_method: squash
