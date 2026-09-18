@@ -27,7 +27,6 @@
 # half the cycle.
 queue_rules:
   - name: default
-    autoqueue: true
     queue_conditions:
       - "label=queue"
     merge_conditions:
@@ -41,10 +40,11 @@ queue_rules:
   # are evaluated on the user PR, while `ci` runs on the draft -- that split is
   # what the scenario needs to show which of the two gets blamed.
   - name: checks-demo
-    autoqueue: true
     queue_conditions:
       - "label=checks-demo"
       - "check-success=security-scan"
     merge_conditions:
       - "check-success=ci"
     merge_method: squash
+merge_protections_settings:
+  auto_merge_conditions: true
