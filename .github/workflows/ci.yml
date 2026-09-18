@@ -18,3 +18,5 @@ jobs:
           python-version: "3.12"
       - run: pip install pytest
       - run: python -m pytest -q
+
+# Probe: an edit on the pull request.
