@@ -26,6 +26,14 @@ STATUS_CONTEXT="security-scan"
 
 cd "$(dirname "$0")/../.."
 
+push() {  # git push, without GitHub's "Create a pull request" banner
+  local out
+  if ! out=$(git push -q "$@" 2>&1); then
+    echo "$out" >&2
+    return 1
+  fi
+}
+
 require_clean_tree() {
   # The script commits on scratch branches; a modified tracked file would ride
   # along into them.
@@ -77,7 +85,7 @@ case "${1:-}" in
 
     git fetch -q origin main
     git checkout -q -B "$TRUNK" origin/main
-    git push -q -f origin "$TRUNK"
+    push -f origin "$TRUNK"
 
     git checkout -q -B "$HEAD" "$TRUNK"
     cat > backend/test_integration_suite.py <<'EOF'
@@ -91,7 +99,7 @@ def test_integration_suite() -> None:
 EOF
     git add backend/test_integration_suite.py
     git commit -q -m "test: add the integration suite"
-    git push -q -f origin "$HEAD"
+    push -f origin "$HEAD"
 
     url=$(gh pr create --repo "$REPO" --base "$TRUNK" --head "$HEAD" \
       --title "test: add the integration suite" \

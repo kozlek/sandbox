@@ -27,6 +27,14 @@ CI=.github/workflows/ci.yml
 
 cd "$(dirname "$0")/../.."
 
+push() {  # git push, without GitHub's "Create a pull request" banner
+  local out
+  if ! out=$(git push -q "$@" 2>&1); then
+    echo "$out" >&2
+    return 1
+  fi
+}
+
 require_clean_tree() {
   # The script commits on scratch branches; a modified tracked file would ride
   # along into them.
@@ -70,11 +78,11 @@ case "${1:-}" in
     # Case 1: the PR changes ci.yml and its base has not moved, so the merge
     # result is the PR's own tree: every workflow blob in it was already pushed.
     git checkout -q -B wfp/base-reuse origin/main
-    git push -q origin wfp/base-reuse
+    push origin wfp/base-reuse
     git checkout -q -B wfp/head-reuse origin/main
     printf '\n# Probe: an edit on the pull request.\n' >> "$CI"
     git commit -q -am "ci: comment the workflow"
-    git push -q origin wfp/head-reuse
+    push origin wfp/head-reuse
     open_probe_pr wfp/base-reuse wfp/head-reuse "probe: workflow change, base unchanged"
 
     # Case 2: the base edited ci.yml too, elsewhere in the file, so GitHub has
@@ -82,11 +90,11 @@ case "${1:-}" in
     git checkout -q -B wfp/base-3way origin/main
     { printf '# Probe: an edit on the base branch.\n'; cat "$CI"; } > "$CI.tmp" && mv "$CI.tmp" "$CI"
     git commit -q -am "ci: comment the workflow on the base"
-    git push -q origin wfp/base-3way
+    push origin wfp/base-3way
     git checkout -q -B wfp/head-3way origin/main
     printf '\n# Probe: an edit on the pull request.\n' >> "$CI"
     git commit -q -am "ci: comment the workflow"
-    git push -q origin wfp/head-3way
+    push origin wfp/head-3way
     open_probe_pr wfp/base-3way wfp/head-3way "probe: workflow change, base changed it too"
 
     git checkout -q main
@@ -127,7 +135,7 @@ jobs:
 EOF
     git add .github/workflows/wfp-probe.yml
     git commit -q -m "probe: merge both probe PRs with GITHUB_TOKEN"
-    git push -q -f origin "$RUNNER"
+    push -f origin "$RUNNER"
     git checkout -q main
     echo "Pushed ${RUNNER}. The run appears within a few seconds:"
     echo "  https://github.com/${REPO}/actions/workflows/wfp-probe.yml"

@@ -23,6 +23,14 @@ HEAD="bp/feature"
 
 cd "$(dirname "$0")/../.."
 
+push() {  # git push, without GitHub's "Create a pull request" banner
+  local out
+  if ! out=$(git push -q "$@" 2>&1); then
+    echo "$out" >&2
+    return 1
+  fi
+}
+
 require_clean_tree() {
   # The script commits on scratch branches; a modified tracked file would ride
   # along into them.
@@ -64,8 +72,8 @@ fi
 
 git fetch -q origin main
 git checkout -q -B "$TRUNK" origin/main
-git push -q origin "$TRUNK"
-git push -q origin "origin/main:refs/heads/${STABLE}"
+push origin "$TRUNK"
+push origin "origin/main:refs/heads/${STABLE}"
 
 git checkout -q -B "$HEAD" "$TRUNK"
 cat >> backend/calculator.py <<'EOF'
@@ -76,7 +84,7 @@ def subtract(a: int, b: int) -> int:
 EOF
 git add backend/calculator.py
 git commit -q -m "feat(calculator): add subtract"
-git push -q origin "$HEAD"
+push origin "$HEAD"
 
 url=$(gh pr create --repo "$REPO" --base "$TRUNK" --head "$HEAD" \
   --title "feat(calculator): add subtract" \
@@ -92,8 +100,12 @@ for _ in $(seq 1 30); do
 done
 echo "Merged #${n} into ${TRUNK}."
 
-gh pr comment --repo "$REPO" "$n" --body "@mergifyio backport ${STABLE} ${MISSING}" >/dev/null
-echo "Asked Mergify to backport #${n} to '${STABLE}' and '${MISSING}' (which does not exist)."
+# One command per branch: a single `backport A B` reply is titled "No backport
+# have been created" as soon as either target fails, even though the other
+# one's PR is listed right under it.
+gh pr comment --repo "$REPO" "$n" --body "@mergifyio backport ${STABLE}" >/dev/null
+gh pr comment --repo "$REPO" "$n" --body "@mergifyio backport ${MISSING}" >/dev/null
+echo "Asked Mergify to backport #${n} to '${STABLE}', then to '${MISSING}' (which does not exist)."
 echo
 echo "Watch: ${url}"
 echo "Then:  https://dashboard.mergify.com/orgs/kozlek/repos/sandbox/activity-log"
