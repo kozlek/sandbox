@@ -48,3 +48,25 @@ queue_rules:
     merge_conditions:
       - "check-success=ci"
     merge_method: squash
+
+  # scenarios/changed-files-from-git. A probe for CHANGED_FILES_FROM_GIT_FOR_ORGS
+  # (MRGFY-7706). GitHub's GET /pulls/{n}/files stops at 3 000 entries with no
+  # error, while `changed_files` stays accurate; above the cap the engine now
+  # lists the changed files with `git diff` instead.
+  #
+  # The scenario's pull request changes 3 501 files, and `zzz-past-the-cap.txt`
+  # sorts last, so GitHub's truncated list provably cannot contain it. The first
+  # condition is the control -- `bulk/f0001.txt` is entry 1 and matches either
+  # way. So the rule admits the pull request only if the engine is reading the
+  # complete list.
+  #
+  # `manual-gate` is a commit status nobody posts: the probe enters the queue and
+  # stays there, which is the whole observation. Drop the label to dequeue it.
+  - name: bigdiff-probe
+    autoqueue: true
+    queue_conditions:
+      - "label=bigdiff-probe"
+      - "files=bulk/f0001.txt"
+      - "files=zzz-past-the-cap.txt"
+    merge_conditions:
+      - "check-success=manual-gate"
