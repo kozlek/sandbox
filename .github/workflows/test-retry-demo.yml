@@ -1,0 +1,34 @@
+name: test-retry-demo
+run-name: "test retry demo: ${{ inputs.act }}"
+
+# scenarios/test-retry. Started by hand, or by its run.sh, on `main`: Mergify
+# retries a failing test only in a build of the default branch, never on a pull
+# request or a merge-queue draft, and a workflow_dispatch run on `main` is one.
+on:
+  workflow_dispatch:
+    inputs:
+      act:
+        description: "flaky: a test times out once. regression: a real bug ships too."
+        type: choice
+        options:
+          - flaky
+          - regression
+        default: flaky
+
+permissions:
+  contents: read
+
+jobs:
+  checkout-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest==9.2.0 pytest-mergify==2026.11.4
+      - name: Run tests
+        run: python -m pytest -v scenarios/test-retry/tests
+        env:
+          MERGIFY_TOKEN: ${{ secrets.MERGIFY_TOKEN }}
+          TEST_RETRY_DEMO_ACT: ${{ inputs.act }}

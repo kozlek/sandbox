@@ -22,3 +22,4 @@ says so and you swap the root config before running it.
 | `backport-activity-log` | the activity log records a backport only when one happened (MRGFY-8674, MRGFY-9158) |
 | `workflows-permission-probe` | what GitHub refuses an app without `workflows`, the basis of MRGFY-9180 |
 | `changed-files-from-git` | the engine lists changed files with git above GitHub's 3 000-file cap (MRGFY-7706) |
+| `test-retry` | test retry rescues a flaky test on `main`, and a real failure still fails (MRGFY-8883) |
