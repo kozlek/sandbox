@@ -50,8 +50,15 @@ scenarios/test-retry/run.sh flaky
 Keep the link of that red run open: it is act 1.
 
 1. **Main goes red for nothing.** Show the red run: one test of seven failed,
-   `TimeoutError: the payment gateway did not answer within 2 s`. Nothing is
-   wrong with the code.
+   and nothing is wrong with the code.
+
+   ```
+   test_checkout.py::test_card_payment_is_captured FAILED
+   E           TimeoutError: the payment gateway did not answer within 2 s
+   ========================= 1 failed, 6 passed in 0.32s ==========================
+   ```
+
+   Its Mergify CI block holds only the test run ID: retry is off.
 2. **Turn it on.** Open the dashboard on `kozlek/sandbox` → Test Engine →
    Configuration → Test Retry. Flip the switch, confirm. Point at the defaults:
    5% retry budget, 5 retries per test, each marked as Mergify's default.
@@ -61,8 +68,22 @@ Keep the link of that red run open: it is act 1.
    scenarios/test-retry/run.sh flaky
    ```
 
-   About 30 s. The test summary's "Test retry" block says the payment test
-   failed, Mergify retried it, and it passed on a retry. The run is green.
+   About 20 s. The payment test now reads `RESCUED`, and the run is green:
+
+   ```
+   test_checkout.py::test_card_payment_is_captured RESCUED [100%]
+
+   ================================== Mergify CI ==================================
+   🔁 Test retry
+   Test retry: 1 test failed, so Mergify retried it.
+   It passed on a retry, so it does not fail this run.
+   Passed on a retry:
+     - scenarios/test-retry/tests/test_checkout.py::test_card_payment_is_captured (attempt 2)
+   Test retry used 0.0 s of its 4.0 s budget.
+   ========================= 6 passed, 1 rescued in 0.26s =========================
+   ```
+
+   The budget is 4 s, not 5% of the suite: a suite this small gets the floor.
 4. **A real bug still fails.** Optionally lower "Retries per test" to 2 and
    save first, to show tuning.
 
@@ -71,8 +92,23 @@ Keep the link of that red run open: it is act 1.
    ```
 
    The payment test is rescued again, but the refund test fails on every
-   attempt: it is listed as still failing, its failure stands, and the run is
-   red. Retry answers flakiness; it does not hide a regression.
+   attempt, and the run is red. Retry answers flakiness; it does not hide a
+   regression.
+
+   ```
+   🔁 Test retry
+   Test retry: 2 tests failed, so Mergify retried them.
+   1 of them passed on a retry, so it does not fail this run.
+   Passed on a retry:
+     - scenarios/test-retry/tests/test_checkout.py::test_card_payment_is_captured (attempt 2)
+   1 of them failed every attempt, so this run fails on it.
+   Still failing:
+     - scenarios/test-retry/tests/test_checkout.py::test_refund_withholds_the_restocking_fee (6 attempts)
+   ==================== 1 failed, 5 passed, 1 rescued in 0.32s ====================
+   ```
+
+   Six attempts is the first run and the 5 default retries; with retries per
+   test at 2, it is three.
 5. **Who did what.** The repository's activity log names who turned test retry
    on and who changed its settings.
 
