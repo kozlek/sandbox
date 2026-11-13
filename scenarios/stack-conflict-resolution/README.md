@@ -61,8 +61,15 @@ scenarios/stack-conflict-resolution/run.sh trunk   # the teammate's change lands
 scenarios/stack-conflict-resolution/run.sh nit     # a review fix on the top PR
 ```
 
-`trunk` waits until Mergify has written its verdict for the new trunk tip, so
-the live push is not racing it.
+`setup` takes about 45 s. `trunk` waits until Mergify has written its verdict
+for the new trunk tip, about 90 s, so the live push is not racing it:
+
+```
+cr/trunk is now de93818, with its own changelog line.
+Waiting for Mergify's verdict on #368...
+GitHub: #368 is dirty.
+Mergify (Mergify Conflict Resolution): Conflicts with cr/trunk: Mergify resolves them when merging
+```
 
 1. **The stack is approved, and the bottom PR now conflicts.** Open the bottom
    PR: approved, and GitHub's banner says it has conflicts that must be
@@ -76,13 +83,33 @@ the live push is not racing it.
    mergify stack push
    ```
 
+   ```
+     ✓ read 2 pull request(s)
+     · branch `cr/stack` rebase skipped: 2 PRs have approvals, and the merge queue resolves the bottom PR's conflicts (use --force-rebase to rebase anyway)
+     ✓ pushed 1 branch(es)
+       · [up-to-date]		https://github.com/kozlek/sandbox/pull/368	feat(slug): add slugify()
+       ✓ [updated]	99bf8ff→0df403c	https://github.com/kozlek/sandbox/pull/369	test(slug): cover slugify()
+   ```
+
    The rebase is skipped, and the line says why. The top PR gets the review fix.
    The bottom PR keeps its head, so its approval and its CI run stand.
+   `mergify stack push --dry-run` gives the same decision without pushing, if
+   you want to show it first.
    Before 2026.11.6, this push rebased: you would be resolving
    `CHANGELOG.md` by hand right now.
 3. **Optional: the queue resolves it.** `run.sh land` labels the bottom PR
    `cr-land`. The queue's draft merges it with `union` and lands it on
-   `cr/trunk`, both changelog lines kept.
+   `cr/trunk`, both changelog lines kept, in about 2 min 45 s:
+
+   ```
+   - Add `subtract()` to the calculator.
+   - Make `divide()` raise a clear error on a zero divisor.
+   - Add `slugify()` to turn a title into a URL slug.
+   ```
+
+   The bottom PR's own commit lands as it was approved, under the queue's merge.
+
+Rehearsed 2026-11-13 with mergify CLI 2026.11.7 (#368, #369).
 
 ## Reset
 
