@@ -1,0 +1,27 @@
+name: approve
+
+# Approves a pull request as github-actions[bot], for scenarios that need an
+# approval nobody else is around to give (scenarios/stack-conflict-resolution).
+# Needs "Allow GitHub Actions to create and approve pull requests" on in the
+# repository's Actions settings.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Number of the pull request to approve
+        required: true
+        type: number
+
+permissions:
+  pull-requests: write
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr review "$PULL_REQUEST" --approve --body "Approved by the bench's approve workflow."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
