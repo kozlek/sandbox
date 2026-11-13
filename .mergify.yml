@@ -29,6 +29,7 @@ queue_rules:
   - name: default
     queue_conditions:
       - "label=queue"
+      - "base!=cr/trunk"  # scenarios/stack-conflict-resolution
     merge_conditions:
       - "check-success=ci"
     batch_size: 3
@@ -42,6 +43,7 @@ queue_rules:
   - name: checks-demo
     queue_conditions:
       - "label=checks-demo"
+      - "base!=cr/trunk"  # scenarios/stack-conflict-resolution
       - "check-success=security-scan"
     merge_conditions:
       - "check-success=ci"
@@ -63,9 +65,40 @@ queue_rules:
   - name: bigdiff-probe
     queue_conditions:
       - "label=bigdiff-probe"
+      - "base!=cr/trunk"  # scenarios/stack-conflict-resolution
       - "files=bulk/f0001.txt"
       - "files=zzz-past-the-cap.txt"
     merge_conditions:
       - "check-success=manual-gate"
+
+  # scenarios/stack-conflict-resolution. The only rule that can take a pull
+  # request on `cr/trunk`: the three above leave that branch out. So for those
+  # pull requests the queue's draft is what merges them, and Mergify reports a
+  # conflict `conflict_resolvers` settle as one it "resolves when merging",
+  # which `mergify stack push` reads, instead of pushing a merge into the pull
+  # request. merge-batch is what lands the draft, resolution included, and it
+  # needs a batch_size above 1.
+  #
+  # `cr-land` is the scenario's last act. Until then the pull request matches
+  # no queue rule, so auto_merge_conditions does not queue it: a queued pull
+  # request gets no verdict.
+  - name: conflict-demo
+    queue_conditions:
+      - "base=cr/trunk"
+      - "label=cr-land"
+    merge_conditions:
+      - "check-success=ci"
+    merge_method: merge-batch
+    batch_size:
+      min: 1
+      max: 2
+
+# scenarios/stack-conflict-resolution: the changelog its stack and its trunk
+# both append to. Only that file, so no other scenario's conflicts change.
+conflict_resolvers:
+  - paths:
+      - scenarios/stack-conflict-resolution/CHANGELOG.md
+    strategy: union
+
 merge_protections_settings:
   auto_merge_conditions: true
