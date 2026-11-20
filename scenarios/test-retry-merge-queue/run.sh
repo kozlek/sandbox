@@ -18,8 +18,9 @@
 # dashboard.
 #
 # Requires gh, authenticated as kozlek, and on `main`: the `retry-demo` queue
-# rule, .github/workflows/test-retry-queue-demo.yml and the MERGIFY_TOKEN
-# secret. See README.md for the walkthrough.
+# rule and .github/workflows/test-retry-queue-demo.yml, and a trust policy of
+# kozlek that lets the job in with its ID token. See README.md for the
+# walkthrough.
 
 set -euo pipefail
 

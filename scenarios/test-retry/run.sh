@@ -14,8 +14,8 @@
 # tests are already there. Switching test retry on and off, and tuning it, is
 # done on the dashboard; that is the demo.
 #
-# Requires gh, authenticated as kozlek, and the MERGIFY_TOKEN secret on the
-# repository. See README.md for the walkthrough.
+# Requires gh, authenticated as kozlek, and a trust policy of kozlek that
+# lets the job in with its ID token. See README.md for the walkthrough.
 
 set -euo pipefail
 

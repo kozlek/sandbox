@@ -31,8 +31,9 @@ do, see `test-retry-merge-queue`.
 
 ## Prerequisites
 
-- The `MERGIFY_TOKEN` repository secret: an application key of the `kozlek`
-  account with the CI scope.
+- A trust policy of `kozlek` covering this repository's `workflow_dispatch`
+  runs (Settings → OIDC): the job reaches Mergify with its GitHub ID token,
+  and sets no `MERGIFY_TOKEN`, which would win over it.
 - `TEST_RETRY_SETTINGS_FOR_ORGS` on for `kozlek` (3019422), or the dashboard
   hides the section. On since 2026-10-30.
 - `ci_insights_quarantine` in kozlek's subscription features, or the plugin is

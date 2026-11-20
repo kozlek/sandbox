@@ -39,7 +39,9 @@ retry on for the default branch.
 
 ## Prerequisites
 
-- The `MERGIFY_TOKEN` repository secret, shared with `test-retry`.
+- A trust policy of `kozlek` covering this repository's `pull_request` runs
+  (Settings → OIDC): the job reaches Mergify with its GitHub ID token. Today's
+  is "CI on every repository".
 - `TEST_RETRY_SETTINGS_FOR_ORGS` on for `kozlek` (3019422), and
   `ci_insights_quarantine` in its subscription features: see `test-retry`.
 - Test retry **on** for `kozlek/sandbox` for the live act (Test Engine →
