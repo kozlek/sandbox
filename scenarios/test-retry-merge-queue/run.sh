@@ -40,6 +40,13 @@ PULLS=(
   "trq/refund-policy|refund-policy.md|copy(checkout): state the restocking fee|A refund holds back a 10% restocking fee on opened items."
 )
 
+# gh 2.105 follows every call naming a pull request with a hint about
+# `gh event listen` on stderr, which would bury the demo's output. Drop it,
+# keep any other error.
+gh() {
+  command gh "$@" 2> >(sed '/^hint: if you need to wait for this pull request/,/^  - Event subscriptions are in preview/d' >&2)
+}
+
 ref_sha() {  # $1 = branch. Its SHA, empty when it does not exist.
   gh api "repos/${REPO}/git/ref/heads/$1" --jq .object.sha 2>/dev/null || true
 }
@@ -55,7 +62,7 @@ trunk_pulls() {  # $1 = jq test on the head branch. The open PRs into the trunk 
 }
 
 scenario_pulls() {
-  trunk_pulls 'startswith("trq/")'
+  trunk_pulls 'startswith("trq/")' | sort -n
 }
 
 check_run() {  # $1 = SHA. Its completed `checkout-tests` run: conclusion and URL, empty until then.
