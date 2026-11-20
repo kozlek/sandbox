@@ -24,3 +24,4 @@ says so and you swap the root config before running it.
 | `changed-files-from-git` | the engine lists changed files with git above GitHub's 3 000-file cap (MRGFY-7706) |
 | `test-retry` | test retry rescues a flaky test on `main`, and a real failure still fails (MRGFY-8883) |
 | `stack-conflict-resolution` | `mergify stack push` keeps an approved stack when the merge queue resolves its conflict (mergify-ci-integrations #2322) |
+| `test-retry-merge-queue` | test retry rescues a flaky test in a merge queue batch, so the batch merges (MRGFY-12316) |

@@ -1,0 +1,33 @@
+name: test-retry-queue-demo
+
+# scenarios/test-retry-merge-queue. Runs the checkout tests on every pull
+# request into `trq/trunk`, the merge queue's drafts among them. Mergify
+# retries a failing test in a run its merge queue checks, never in a pull
+# request's own run.
+on:
+  pull_request:
+    branches:
+      - trq/trunk
+
+permissions:
+  contents: read
+
+jobs:
+  # The check-run name is this job id. `retry-demo` in .mergify.yml requires
+  # it on each pull request, and again on the queue's draft.
+  checkout-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest==9.2.0 pytest-mergify==2026.11.17
+      - name: Run tests
+        run: python -m pytest -v scenarios/test-retry/tests
+        env:
+          MERGIFY_TOKEN: ${{ secrets.MERGIFY_TOKEN }}
+          # The queue's drafts meet the cold payment gateway, the pull
+          # requests' own runs a warm one: each pull request is green on its
+          # own, and the flake lands on the batch.
+          TEST_RETRY_DEMO_ACT: ${{ startsWith(github.head_ref, 'mergify/merge-queue/') && 'flaky' || 'warm' }}

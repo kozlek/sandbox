@@ -93,6 +93,20 @@ queue_rules:
       min: 1
       max: 2
 
+  # scenarios/test-retry-merge-queue. Pull requests into `trq/trunk` labelled
+  # `trq-queue`, which no rule above takes, since each needs a label these
+  # never get. Three of them fill one batch, checked on one draft, whose
+  # `checkout-tests` run meets the flaky payment test.
+  - name: retry-demo
+    queue_conditions:
+      - "base=trq/trunk"
+      - "label=trq-queue"
+      - "check-success=checkout-tests"
+    merge_conditions:
+      - "check-success=checkout-tests"
+    batch_size: 3
+    merge_method: squash
+
 # scenarios/stack-conflict-resolution: the changelog its stack and its trunk
 # both append to. Only that file, so no other scenario's conflicts change.
 conflict_resolvers:
