@@ -16,7 +16,8 @@ on:
         default: flaky
 
 permissions:
-  contents: read
+  id-token: write # lets the job ask GitHub for an ID token
+  contents: read # a permissions block resets the others, checkout needs this one
 
 jobs:
   checkout-tests:
@@ -30,5 +31,4 @@ jobs:
       - name: Run tests
         run: python -m pytest -v scenarios/test-retry/tests
         env:
-          MERGIFY_TOKEN: ${{ secrets.MERGIFY_TOKEN }}
           TEST_RETRY_DEMO_ACT: ${{ inputs.act }}

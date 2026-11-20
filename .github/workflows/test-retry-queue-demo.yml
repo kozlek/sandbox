@@ -10,7 +10,8 @@ on:
       - trq/trunk
 
 permissions:
-  contents: read
+  id-token: write # lets the job ask GitHub for an ID token
+  contents: read # a permissions block resets the others, checkout needs this one
 
 jobs:
   # The check-run name is this job id. `retry-demo` in .mergify.yml requires
@@ -26,7 +27,6 @@ jobs:
       - name: Run tests
         run: python -m pytest -v scenarios/test-retry/tests
         env:
-          MERGIFY_TOKEN: ${{ secrets.MERGIFY_TOKEN }}
           # The queue's drafts meet the cold payment gateway, the pull
           # requests' own runs a warm one: each pull request is green on its
           # own, and the flake lands on the batch.
