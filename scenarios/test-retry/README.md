@@ -12,7 +12,8 @@ a budget (a share of the suite's expected duration, 5% by default, never under
 4 s) and a cap on the retries of each test (5 by default). A test that passes
 on a retry leaves the build green; one still failing after its retries fails it
 as before. Tests Mergify knows as broken, and quarantined tests, are never
-retried. Pull requests and merge-queue drafts never retry.
+retried. Pull requests never retry; since 2026.11.12 the merge queue's runs
+do, see `test-retry-merge-queue`.
 
 ## How the bench stages it
 

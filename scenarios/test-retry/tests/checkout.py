@@ -8,6 +8,10 @@ import os
 # act ships a real bug in `refund`, the kind a retry must never hide.
 REGRESSION_SHIPPED = os.environ.get("TEST_RETRY_DEMO_ACT") == "regression"
 
+# The `warm` act, a pull request's own run in the merge queue scenario, meets
+# a gateway that answers at once: there, only the queue's runs are cold.
+COLD_GATEWAY = os.environ.get("TEST_RETRY_DEMO_ACT") != "warm"
+
 # Counts the payment gateway's connections in this process. Mergify retries a
 # test in the process that ran it, so only the first attempt meets the cold
 # gateway: the flake is staged, and the retry that answers it is real.
@@ -56,6 +60,6 @@ class PaymentGateway:
     process times out, the way a cold service does on a CI runner."""
 
     def charge(self, amount_cents: int) -> Receipt:
-        if next(_gateway_connections) == 0:
+        if COLD_GATEWAY and next(_gateway_connections) == 0:
             raise TimeoutError("the payment gateway did not answer within 2 s")
         return Receipt(amount_cents=amount_cents, status="captured")
